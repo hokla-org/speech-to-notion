@@ -29,7 +29,7 @@ export default function Home() {
   return (
     <Card className="w-[350px]">
       <CardHeader>
-        <CardTitle>Audio Transcriber</CardTitle>
+        <CardTitle>Speech to Notion</CardTitle>
         <CardDescription>
           Transcribe audio recording into Notion in real time.
         </CardDescription>
