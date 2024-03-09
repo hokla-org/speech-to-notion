@@ -1,73 +1,25 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Audio Transcription Gateway
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The `audio-transcription.gateway.ts` file is a crucial part of the server that handles audio transcription services. It is built using the NestJS framework and leverages WebSockets for real-time, bidirectional, and event-based communication. This gateway is designed to connect to the Gladia API for audio transcription, providing an efficient way to transcribe audio streams in various formats and languages.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Key Features
 
-## Description
+- **WebSocket Gateway**: Utilizes the `@WebSocketGateway` decorator to create a WebSocket server that listens for incoming connections and data.
+- **Environment Configuration**: Integrates with `dotenv` for environment variable management, ensuring sensitive information like the Gladia API key is securely stored.
+- **Dynamic Audio Transcription**: Supports multiple audio formats and configurations, including sample rates, languages, and transcription models, through the Gladia API.
+- **Real-time Communication**: Sends audio frames received from clients to the Gladia API for transcription and broadcasts the transcription results back to the clients in real-time.
+- **Error Handling**: Implements robust error handling for WebSocket connections, ensuring stability and reliability.
+- **Logging**: Uses the `Logger` service from NestJS for logging important events and errors, aiding in debugging and monitoring.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## How It Works
 
-## Installation
+1. **Initialization**: Upon server initialization, the gateway establishes a WebSocket connection to the Gladia API and sends an initial configuration for the audio transcription service.
+2. **Client Handling**: Listens for new client connections and disconnections, logging these events for monitoring purposes.
+3. **Audio Frame Processing**: Receives audio frames from connected clients, converts them to the required format, and forwards them to the Gladia API for transcription.
+4. **Transcription Results**: Receives transcription results from Gladia and broadcasts these results to all connected clients, enabling real-time transcription feedback.
 
-```bash
-$ yarn install
-```
+## Configuration
 
-## Running the app
+The gateway is configured to handle large audio files with a maximum HTTP buffer size of 25 MB and supports various transports including WebSocket and polling. It is also set up to manage connection timeouts, ensuring a smooth user experience.
 
-```bash
-# development
-$ yarn run start
-
-# watch mode
-$ yarn run start:dev
-
-# production mode
-$ yarn run start:prod
-```
-
-## Test
-
-```bash
-# unit tests
-$ yarn run test
-
-# e2e tests
-$ yarn run test:e2e
-
-# test coverage
-$ yarn run test:cov
-```
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+This gateway is a key component in enabling real-time audio transcription services, making it an essential part of applications that require audio processing capabilities.

@@ -73,7 +73,6 @@ export class AudioTranscriptionGateway
 
   afterInit(server: Server) {
     this.connectToGladia();
-    //this.logger.log(`🚀 Server initialized!`);
   }
 
   handleConnection(client: Socket) {
@@ -119,7 +118,7 @@ export class AudioTranscriptionGateway
     if (this.gladiaWs.readyState === WebSocket.OPEN) {
       const binaryData = Buffer.from(data, 'base64');
       this.logger.log(
-        `🔊 Sending audio frame of length: ${binaryData.length} bytes`,
+        `🔊 Sending audio frame of length: ${(binaryData.length / (1024 * 1024)).toFixed(2)} MB`,
       );
       this.gladiaWs.send(binaryData);
     }

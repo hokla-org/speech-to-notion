@@ -66,9 +66,9 @@ export const useTranscriber = (config: UseTranscriberConfig) => {
           const arrayBuffer = await blob.arrayBuffer();
           // Removing the WAV header from the audio buffer before sending
           const modifiedBuffer = arrayBuffer.slice(44);
-
-          const lengthInMB = modifiedBuffer.byteLength / (1024 * 1024);
-          console.log(`Sending buffer of length: ${lengthInMB.toFixed(2)} MB`);
+          console.log(
+            `Sending buffer of length: ${(modifiedBuffer.byteLength / (1024 * 1024)).toFixed(2)} MB`
+          );
           if (modifiedBuffer.byteLength > 0) {
             const base64Data = Buffer.from(modifiedBuffer).toString("base64");
             socketRef.current.emit("audioFrame", base64Data);
