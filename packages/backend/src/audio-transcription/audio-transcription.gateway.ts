@@ -6,6 +6,7 @@ import {
   OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  ConnectedSocket,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
@@ -105,8 +106,9 @@ export class AudioTranscriptionGateway
   @WebSocketServer() server: Server;
   private gladiaWs: WebSocket; // WebSocket connection to Gladia
   private logger = new Logger('AudioTranscriptionGateway');
+  private notionBlockId: string | null = null;
 
-  afterInit(server: Server) {
+  afterInit() {
     this.connectToGladia();
   }
 
@@ -143,8 +145,11 @@ export class AudioTranscriptionGateway
 
       const result: GladiaResult = JSON.parse(data.toString());
 
-      if (result.event === 'transcript' && result.type === 'final') {
-        this.notionService.appendTextAfterBlock(BLOCK_ID, result.transcription);
+      if (result.event === 'transcript') {
+        this.notionService.appendTextAfterBlock(
+          this.notionBlockId,
+          result.transcription,
+        );
       }
     });
 
@@ -162,6 +167,46 @@ export class AudioTranscriptionGateway
         `🔊 Sending audio frame of length: ${(binaryData.length / (1024 * 1024)).toFixed(2)} MB`,
       );
       this.gladiaWs.send(binaryData);
+    }
+  }
+
+  @SubscribeMessage('setNotionTarget')
+  async handleSetNotionTarget(
+    @MessageBody() data: { notionUrl: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const result = await this.notionService.checkAccess(data.notionUrl);
+      if (result.status === 'error') {
+        this.logger.error(`Invalid Notion URL provided by client ${client.id}`);
+        client.emit('notionTargetResponse', {
+          status: 'error',
+          message: 'Invalid Notion URL',
+        });
+        return;
+      }
+      this.notionBlockId = result.blockId;
+
+      this.notionService.appendTextAfterBlock(
+        this.notionBlockId,
+        'Starting transcription...',
+      );
+
+      this.logger.log(
+        `Notion target blockId set for client ${client.id}: ${this.notionBlockId}`,
+      );
+      client.emit('notionTargetResponse', {
+        status: 'success',
+        blockId: this.notionBlockId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error setting Notion target for client ${client.id}: ${error.message}`,
+      );
+      client.emit('notionTargetResponse', {
+        status: 'error',
+        message: 'Error setting Notion target',
+      });
     }
   }
 }

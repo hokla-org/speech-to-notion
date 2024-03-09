@@ -33,10 +33,10 @@ type ErrorResult = {
 
 type Result = TranscriptionResult | ConnectedResult | ErrorResult;
 
-type Status = "idle" | "connecting" | "transcribing" | "error";
+type Status = "ready" | "connecting" | "transcribing" | "error";
 
 interface UseTranscriberConfig {
-  transcription_hint: string;
+  transcription_hint?: string;
 }
 
 const DEFAULT_RECORDER_CONFIG: RecordRTC.Options = {
@@ -49,85 +49,134 @@ const DEFAULT_RECORDER_CONFIG: RecordRTC.Options = {
   timeSlice: 10000, // Send data every 10 seconds
 };
 
+class TranscribeClient {
+  socket: ReturnType<typeof io> | null = null;
+  onConnected: () => void;
+  onResult: (result: TranscriptionResult) => void;
+  onError: (error: Error) => void;
+
+  constructor(
+    onConnected: () => void,
+    onResult: (result: TranscriptionResult) => void,
+    onError: (error: Error) => void
+  ) {
+    this.onConnected = onConnected;
+    this.onResult = onResult;
+    this.onError = onError;
+  }
+
+  connect() {
+    this.socket = io(
+      process.env.NEXT_PUBLIC_BACKEND_ENDPOINT || "http://localhost:4000"
+    );
+
+    this.socket.on("connect", this.onConnected);
+    this.socket.on("transcriptionResult", (data: string) => {
+      const result: Result = JSON.parse(data);
+      if (result.event === "transcript") {
+        this.onResult(result as TranscriptionResult);
+      } else if (result.event === "error") {
+        this.onError(new Error(result.message));
+      }
+    });
+    this.socket.on(
+      "notionTargetResponse",
+      (response: { status: string; blockId?: string; message?: string }) => {
+        if (response.status === "success") {
+          console.log(
+            `Notion target set successfully. Block ID: ${response.blockId}`
+          );
+        } else {
+          console.error(`Failed to set Notion target: ${response.message}`);
+        }
+      }
+    );
+    this.socket.on("connect_error", (err: Error) => {
+      this.onError(new Error(`Socket.io connection error: ${err.message}`));
+    });
+    this.socket.on("disconnect", () => {
+      this.socket = null;
+    });
+  }
+
+  setNotionTarget(notionUrl: string) {
+    if (this.socket && this.socket.connected) {
+      this.socket.emit("setNotionTarget", { notionUrl });
+    }
+  }
+
+  async emitFrame(blob: Blob) {
+    if (this.socket && this.socket.connected) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const modifiedBuffer = arrayBuffer.slice(44); // Removing the WAV header
+      if (modifiedBuffer.byteLength > 0) {
+        const base64Data = Buffer.from(modifiedBuffer).toString("base64");
+        console.log(
+          `Sending buffer of length: ${(modifiedBuffer.byteLength / (1024 * 1024)).toFixed(2)} MB`
+        );
+
+        this.socket.emit("audioFrame", base64Data);
+      }
+    }
+  }
+
+  disconnect() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+  }
+}
+
 export const useTranscriber = (config: UseTranscriberConfig) => {
   const [results, setResults] = useState<TranscriptionResult[]>([]);
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<Status>("ready");
   const [error, setError] = useState<Error | null>(null);
-  const recorderRef = useRef<RecordRTC | null>(null);
-  const socketRef = useRef<ReturnType<typeof io> | null>(null);
+  const recorder = useRef<RecordRTC | null>(null);
+  const client = useRef<TranscribeClient | null>(null);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (notionURL: string) => {
     setStatus("connecting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      const handleAudioFrame = async (blob: Blob) => {
-        if (socketRef.current && socketRef.current.connected) {
-          const arrayBuffer = await blob.arrayBuffer();
-          // Removing the WAV header from the audio buffer before sending
-          const modifiedBuffer = arrayBuffer.slice(44);
-          console.log(
-            `Sending buffer of length: ${(modifiedBuffer.byteLength / (1024 * 1024)).toFixed(2)} MB`
-          );
-          if (modifiedBuffer.byteLength > 0) {
-            const base64Data = Buffer.from(modifiedBuffer).toString("base64");
-            socketRef.current.emit("audioFrame", base64Data);
-          }
-        }
-      };
-
-      recorderRef.current = new RecordRTC(stream, {
+      recorder.current = new RecordRTC(stream, {
         ...DEFAULT_RECORDER_CONFIG,
-        ondataavailable: handleAudioFrame,
+        ondataavailable: (blob: Blob) => {
+          client.current?.emitFrame(blob);
+        },
       });
 
-      socketRef.current = io(
-        process.env.NEXT_PUBLIC_BACKEND_ENDPOINT || "http://localhost:4000"
-      );
-      socketRef.current.on("connect", () => {
-        setStatus("transcribing");
-        recorderRef.current!.startRecording();
-      });
-
-      socketRef.current.on("transcriptionResult", (data) => {
-        const result: Result = JSON.parse(data);
-        if (result.event === "transcript") {
+      client.current = new TranscribeClient(
+        () => {
+          setStatus("transcribing");
+          client.current!.setNotionTarget(notionURL);
+          recorder.current!.startRecording();
+        },
+        (result) => {
           setResults((prev) => [...prev, result]);
-        }
-        if (result.event === "error") {
-          setError(new Error(result.message));
+        },
+        (err) => {
+          setError(err);
           setStatus("error");
         }
-      });
+      );
 
-      socketRef.current.on("connect_error", (err) => {
-        console.error("Socket.io connection error:", err);
-        setError(new Error(`Socket.io connection error: ${err}`));
-        setStatus("error");
-      });
-
-      socketRef.current.on("disconnect", () => {
-        if (status !== "error") {
-          setStatus("idle");
-        }
-      });
+      client.current.connect();
     } catch (err) {
       setError(err instanceof Error ? err : new Error("An error occurred"));
       setStatus("error");
     }
-  }, [config]);
+  }, []);
 
   const stop = useCallback(() => {
-    if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      recorderRef.current.stopRecording();
+    if (recorder.current && recorder.current.state !== "inactive") {
+      recorder.current.stopRecording();
     }
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
-    recorderRef.current = null;
-    socketRef.current = null;
+    client.current?.disconnect();
+    recorder.current = null;
+    client.current = null;
     if (status !== "error") {
-      setStatus("idle");
+      setStatus("ready");
     }
   }, [status]);
 
