@@ -12,7 +12,7 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import * as WebSocket from 'ws';
 import * as dotenv from 'dotenv';
-import { NotionService } from '../notion/notion.service';
+import { NotionBlockId, NotionService } from '../notion/notion.service';
 dotenv.config();
 
 const GLADIA_WEB_SOCKET_URL =
@@ -86,8 +86,6 @@ const DEFAULT_GLADIA_CONFIG: InitialConfigMessage = {
   frames_format: 'bytes',
 };
 
-const BLOCK_ID = '4879c771-fc7e-4e29-a8d9-6c7ebb98fccd';
-
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -106,7 +104,7 @@ export class AudioTranscriptionGateway
   @WebSocketServer() server: Server;
   private gladiaWs: WebSocket; // WebSocket connection to Gladia
   private logger = new Logger('AudioTranscriptionGateway');
-  private notionBlockId: string | null = null;
+  private notionBlockId: NotionBlockId | null = null;
 
   afterInit() {
     this.connectToGladia();
@@ -138,18 +136,25 @@ export class AudioTranscriptionGateway
       this.gladiaWs.send(JSON.stringify(initialConfig));
     });
 
-    this.gladiaWs.on('message', (data) => {
+    this.gladiaWs.on('message', async (data) => {
       this.logger.log('📩 Received message from Gladia:', data.toString());
       // Forward Gladia's response to all connected clients
       this.server.emit('transcriptionResult', data.toString());
 
       const result: GladiaResult = JSON.parse(data.toString());
 
-      if (result.event === 'transcript') {
-        this.notionService.appendTextAfterBlock(
-          this.notionBlockId,
-          result.transcription,
-        );
+      if (
+        result.event === 'transcript' &&
+        result.type === 'final' &&
+        this.notionBlockId
+      ) {
+        const blocks = await this.notionService.appendTextAfterBlock({
+          ...this.notionBlockId,
+          text: result.transcription,
+        });
+
+        // append text after created block
+        this.notionBlockId.blockId = blocks.results[0]?.id;
       }
     });
 
@@ -185,15 +190,17 @@ export class AudioTranscriptionGateway
         });
         return;
       }
-      this.notionBlockId = result.blockId;
-
-      this.notionService.appendTextAfterBlock(
-        this.notionBlockId,
-        'Starting transcription...',
-      );
+      this.notionBlockId = { pageId: result.pageId, blockId: result.blockId };
+      const blocks = await this.notionService.appendTextAfterBlock({
+        ...this.notionBlockId,
+        text: 'Starting transcription...',
+      });
+      // append text after created block
+      this.notionBlockId.blockId = blocks.results[0]?.id;
 
       this.logger.log(
-        `Notion target blockId set for client ${client.id}: ${this.notionBlockId}`,
+        `Notion target blockId set for client ${client.id}`,
+        this.notionBlockId,
       );
       client.emit('notionTargetResponse', {
         status: 'success',
