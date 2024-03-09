@@ -11,6 +11,7 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import * as WebSocket from 'ws';
 import * as dotenv from 'dotenv';
+import { NotionService } from '../notion/notion.service';
 dotenv.config();
 
 const GLADIA_WEB_SOCKET_URL =
@@ -47,12 +48,44 @@ interface InitialConfigMessage {
   maximum_audio_duration?: number;
 }
 
+type WordDetail = {
+  word: string;
+  time_begin: number;
+  time_end: number;
+  confidence: number;
+};
+
+type TranscriptionResult = {
+  event: 'transcript';
+  type: 'final' | 'partial';
+  transcription: string;
+  language: string;
+  time_begin: number;
+  time_end: number;
+  duration: number;
+  words: WordDetail[];
+};
+
+type ConnectedResult = {
+  event: 'connected';
+  request_id: string;
+};
+
+type ErrorResult = {
+  event: 'error';
+  message: string;
+};
+
+type GladiaResult = TranscriptionResult | ConnectedResult | ErrorResult;
+
 const DEFAULT_GLADIA_CONFIG: InitialConfigMessage = {
   x_gladia_key: process.env.GLADIA_API_KEY || '',
   sample_rate: 48000,
   language_behaviour: 'automatic single language',
   frames_format: 'bytes',
 };
+
+const BLOCK_ID = '4879c771-fc7e-4e29-a8d9-6c7ebb98fccd';
 
 @WebSocketGateway({
   cors: {
@@ -67,6 +100,8 @@ const DEFAULT_GLADIA_CONFIG: InitialConfigMessage = {
 export class AudioTranscriptionGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
+  constructor(private readonly notionService: NotionService) {}
+
   @WebSocketServer() server: Server;
   private gladiaWs: WebSocket; // WebSocket connection to Gladia
   private logger = new Logger('AudioTranscriptionGateway');
@@ -105,6 +140,12 @@ export class AudioTranscriptionGateway
       this.logger.log('📩 Received message from Gladia:', data.toString());
       // Forward Gladia's response to all connected clients
       this.server.emit('transcriptionResult', data.toString());
+
+      const result: GladiaResult = JSON.parse(data.toString());
+
+      if (result.event === 'transcript' && result.type === 'final') {
+        this.notionService.appendTextAfterBlock(BLOCK_ID, result.transcription);
+      }
     });
 
     this.gladiaWs.on('error', (error) => {
