@@ -41,9 +41,10 @@ interface UseTranscriberConfig {
 
 const DEFAULT_RECORDER_CONFIG: RecordRTC.Options = {
   type: "audio",
-  mimeType: "audio/wav",
-  sampleRate: 16000,
-  desiredSampRate: 16000,
+  // @ts-ignore
+  mimeType: "audio/webm;codecs=opus",
+  sampleRate: 96000,
+  desiredSampRate: 96000,
   recorderType: StereoAudioRecorder,
   numberOfAudioChannels: 1,
   timeSlice: 10000, // Send data every 10 seconds
@@ -138,7 +139,13 @@ export const useTranscriber = (config: UseTranscriberConfig) => {
   const start = useCallback(async (notionURL: string) => {
     setStatus("connecting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 96000,
+        },
+      });
       recorder.current = new RecordRTC(stream, {
         ...DEFAULT_RECORDER_CONFIG,
         ondataavailable: (blob: Blob) => {
