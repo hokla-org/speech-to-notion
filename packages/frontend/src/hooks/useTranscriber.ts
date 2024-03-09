@@ -43,11 +43,11 @@ const DEFAULT_RECORDER_CONFIG: RecordRTC.Options = {
   type: "audio",
   // @ts-ignore
   mimeType: "audio/webm;codecs=opus",
-  sampleRate: 96000,
-  desiredSampRate: 96000,
+  sampleRate: 44100,
+  desiredSampRate: 44100,
   recorderType: StereoAudioRecorder,
   numberOfAudioChannels: 1,
-  timeSlice: 10000, // Send data every 10 seconds
+  timeSlice: 30000, // Send data every 10 seconds
 };
 
 class TranscribeClient {
@@ -109,7 +109,7 @@ class TranscribeClient {
   async emitFrame(blob: Blob) {
     if (this.socket && this.socket.connected) {
       const arrayBuffer = await blob.arrayBuffer();
-      const modifiedBuffer = arrayBuffer.slice(44); // Removing the WAV header
+      const modifiedBuffer = arrayBuffer.slice(0); // Removing the WAV header
       if (modifiedBuffer.byteLength > 0) {
         const base64Data = Buffer.from(modifiedBuffer).toString("base64");
         console.log(
@@ -143,7 +143,7 @@ export const useTranscriber = (config: UseTranscriberConfig) => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 96000,
+          sampleRate: 44100,
         },
       });
       recorder.current = new RecordRTC(stream, {

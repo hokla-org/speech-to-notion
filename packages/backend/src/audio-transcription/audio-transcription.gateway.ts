@@ -13,12 +13,13 @@ import { Server, Socket } from 'socket.io';
 import * as WebSocket from 'ws';
 import * as dotenv from 'dotenv';
 import { NotionBlockId, NotionService } from '../notion/notion.service';
+import { GladiaService } from '../gladia/gladia.service';
 dotenv.config();
 
 const GLADIA_WEB_SOCKET_URL =
   'wss://api.gladia.io/audio/text/audio-transcription';
 
-interface InitialConfigMessage {
+interface GladiaConfig {
   x_gladia_key: string;
   encoding?:
     | 'WAV'
@@ -79,11 +80,14 @@ type ErrorResult = {
 
 type GladiaResult = TranscriptionResult | ConnectedResult | ErrorResult;
 
-const DEFAULT_GLADIA_CONFIG: InitialConfigMessage = {
+const DEFAULT_GLADIA_CONFIG: GladiaConfig = {
   x_gladia_key: process.env.GLADIA_API_KEY || '',
   sample_rate: 48000,
   language_behaviour: 'automatic single language',
   frames_format: 'bytes',
+  language: 'fr',
+  transcription_hint:
+    'Un meeting entre Floryan, Head of QARA de Hokla, et Dour, CEO de Dalia Care. Atelier réglementaire sur Dalia',
 };
 
 @WebSocketGateway({
@@ -99,7 +103,10 @@ const DEFAULT_GLADIA_CONFIG: InitialConfigMessage = {
 export class AudioTranscriptionGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
-  constructor(private readonly notionService: NotionService) {}
+  constructor(
+    private readonly notionService: NotionService,
+    private readonly gladiaService: GladiaService,
+  ) {}
 
   @WebSocketServer() server: Server;
   private gladiaWs: WebSocket; // WebSocket connection to Gladia
@@ -107,7 +114,7 @@ export class AudioTranscriptionGateway
   private notionBlockId: NotionBlockId | null = null;
 
   afterInit() {
-    this.connectToGladia();
+    //this.connectToGladia();
   }
 
   handleConnection(client: Socket) {
@@ -148,13 +155,7 @@ export class AudioTranscriptionGateway
         result.type === 'final' &&
         this.notionBlockId
       ) {
-        const blocks = await this.notionService.appendTextAfterBlock({
-          ...this.notionBlockId,
-          text: result.transcription,
-        });
-
-        // append text after created block
-        this.notionBlockId.blockId = blocks.results[0]?.id;
+        await this.appendText(result.transcription);
       }
     });
 
@@ -164,15 +165,89 @@ export class AudioTranscriptionGateway
   }
 
   @SubscribeMessage('audioFrame')
-  handleAudioFrame(@MessageBody() data: string) {
-    // Convert base64 data to binary before forwarding audio frame to Gladia
-    if (this.gladiaWs.readyState === WebSocket.OPEN) {
+  async handleAudioFrame(@MessageBody() data: string) {
+    const TRANSCRIPTION_STRATEGY =
+      process.env.TRANSCRIPTION_STRATEGY || 'gladia-pre-recorded-polling-v2';
+
+    if (TRANSCRIPTION_STRATEGY === 'gladia-live-transcription-v1') {
+      // Convert base64 data to binary before forwarding audio frame to Gladia
+      if (this.gladiaWs.readyState === WebSocket.OPEN) {
+        const binaryData = Buffer.from(data, 'base64');
+        this.logger.log(
+          `🔊 Sending audio frame of length: ${(binaryData.length / (1024 * 1024)).toFixed(2)} MB`,
+        );
+        this.gladiaWs.send(binaryData);
+      }
+    } else if (TRANSCRIPTION_STRATEGY === 'gladia-pre-recorded-polling-v2') {
       const binaryData = Buffer.from(data, 'base64');
-      this.logger.log(
-        `🔊 Sending audio frame of length: ${(binaryData.length / (1024 * 1024)).toFixed(2)} MB`,
+      const blobData = new Blob([binaryData], {
+        type: 'audio/webm;codecs=opus',
+      });
+      console.log(
+        '📦 Uploading audio blob of size: ' +
+          (blobData.size / 1024 / 1024).toFixed(2) +
+          ' MB',
       );
-      this.gladiaWs.send(binaryData);
+      const audioFile = await this.gladiaService.uploadAudio(blobData);
+      const { id } = await this.gladiaService.requestTranscription({
+        audio_url: audioFile.audio_url,
+        diarization: true,
+        diarization_config: {
+          max_speakers: 2,
+          min_speakers: 1,
+          number_of_speakers: 2,
+        },
+        context_prompt:
+          'Un meeting entre Floryan, Head of QARA de Hokla, et Dour, CEO de Dalia Care. Atelier réglementaire sur Dalia',
+        language: 'fr',
+      });
+      this.logger.log(`Fetching transcription with ID: ${id}`);
+      let request = await this.gladiaService.getTranscription(id);
+      this.logger.log(`Fetched transcription status: ${request.status}`);
+
+      let pollingAttempts = 0;
+      const MAX_POLLING_ATTEMPS = 12; // Assuming we want to poll for a maximum of 1 minute at a 5-second interval
+      const SLEEP_INTERVAL = 5000;
+      while (
+        (request.status === 'processing' || request.status === 'queued') &&
+        pollingAttempts < MAX_POLLING_ATTEMPS
+      ) {
+        this.logger.log('🔄 Polling for transcription status...');
+        request = await this.gladiaService.getTranscription(request.id);
+
+        await new Promise((resolve) => setTimeout(resolve, SLEEP_INTERVAL));
+        pollingAttempts++;
+      }
+      if (pollingAttempts === MAX_POLLING_ATTEMPS) {
+        this.logger.log(
+          '⏱️ Max polling attempts reached. Stopping transcription status checks.',
+        );
+        return;
+      }
+
+      if (request.status === 'done') {
+        this.logger.log('✅ Transcription completed:', request);
+        await this.appendText(request.result.transcription.full_transcript);
+      }
+    } else {
+      this.logger.error(
+        'Invalid TRANSCRIPTION_STRATEGY set. Please check your environment variables.',
+      );
     }
+  }
+  async appendText(text: string) {
+    if (!this.notionBlockId?.blockId) {
+      console.error('No Notion block ID set. Cannot append text.');
+      return;
+    }
+
+    const result = await this.notionService.appendTextAfterBlock({
+      ...this.notionBlockId,
+      text: text,
+    });
+
+    // Update the block ID to the newly created block's ID for future appends
+    this.notionBlockId.blockId = result.results[0]?.id;
   }
 
   @SubscribeMessage('setNotionTarget')
@@ -191,12 +266,7 @@ export class AudioTranscriptionGateway
         return;
       }
       this.notionBlockId = { pageId: result.pageId, blockId: result.blockId };
-      const blocks = await this.notionService.appendTextAfterBlock({
-        ...this.notionBlockId,
-        text: 'Starting transcription...',
-      });
-      // append text after created block
-      this.notionBlockId.blockId = blocks.results[0]?.id;
+      await this.appendText('Starting transcription...');
 
       this.logger.log(
         `Notion target blockId set for client ${client.id}`,
