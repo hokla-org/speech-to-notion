@@ -13,9 +13,9 @@ dotenv.config();
     {
       provide: 'AudioTranscriptionStrategy',
       useClass:
-        process.env.GLADIA_STRATEGY === 'live'
-          ? GladiaLiveStrategy
-          : GladiaPreRecordedStrategy,
+        process.env.GLADIA_STRATEGY === 'pre-recorded'
+          ? GladiaPreRecordedStrategy
+          : GladiaLiveStrategy,
     },
     NotionService,
     GladiaService,
