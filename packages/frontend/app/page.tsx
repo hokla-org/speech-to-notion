@@ -64,10 +64,8 @@ export default function Home() {
             Transcribe Error: {error.message}
           </div>
         ) : (
-          <div>
-            {results.map((result, index) => (
-              <p key={index}>{result.transcription}</p>
-            ))}
+          <div className="text-green-500 border border-green-500 p-2 rounded">
+            🎉 Transcribed {results.length} audio snippets! 🎉
           </div>
         )}
       </CardContent>
