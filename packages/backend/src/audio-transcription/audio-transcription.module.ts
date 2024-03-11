@@ -5,8 +5,6 @@ import {
 } from './gladia.strategies';
 import { NotionService } from '../notion/notion.service';
 import { GladiaService } from '../gladia/gladia.service';
-import * as dotenv from 'dotenv';
-dotenv.config();
 
 @Module({
   providers: [

@@ -1,6 +1,4 @@
 import { Client } from '@notionhq/client';
-import * as dotenv from 'dotenv';
-dotenv.config();
 
 export type NotionBlockId = {
   pageId: string;
