@@ -18,10 +18,15 @@ const UploadPage = () => {
 
   useEffect(() => {
     if (result?.status === "done" && result) {
-      const base64Data = btoa(
-        JSON.stringify(result.result.transcription.utterances)
-      );
-      setDownloadLink(`data:application/json;base64,${base64Data}`);
+      const formattedUtterances = result.result.transcription.utterances
+        .map(
+          (utterance) => `**Speaker ${utterance.speaker}** | _${utterance.text}_`
+        )
+        .join("\n\n");
+      const bytes = new TextEncoder().encode(formattedUtterances);
+      const blob = new Blob([bytes], { type: "text/plain" });
+      const blobUrl = URL.createObjectURL(blob);
+      setDownloadLink(blobUrl);
     }
   }, [status, result]);
 
@@ -96,7 +101,7 @@ const UploadPage = () => {
         </p>
       )}
       {downloadLink && (
-        <a href={downloadLink} download="transcription.txt">
+        <a href={downloadLink} download="transcription.md">
           Download Transcription
         </a>
       )}
