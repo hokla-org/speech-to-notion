@@ -1,0 +1,11 @@
+{
+  "apps": [
+    {
+      "app_id": "app_f8ed5541-69af-4792-ad65-ac1eb49af2d9",
+      "org_id": "orga_4059b15e-d4bf-4745-945d-a1f40c982d6a",
+      "deploy_url": "https://github.com/hokla-org/speech-to-notion.git",
+      "name": "Speech To Notion (Prod) - Frontend",
+      "alias": "Speech-To-Notion-(Prod)-Frontend"
+    }
+  ]
+}

@@ -281,9 +281,9 @@ export class GladiaPreRecordedStrategy extends AudioTranscriptionStrategy {
         (blobData.size / 1024 / 1024).toFixed(2) +
         ' MB',
     );
-    const audioFile = await this.gladiaService.uploadAudio(blobData);
+    const uploadedFile = await this.gladiaService.uploadAudio(blobData);
     const { id } = await this.gladiaService.requestTranscription({
-      audio_url: audioFile.audio_url,
+      audio_url: uploadedFile.audio_url,
       diarization: true,
       diarization_config: {
         max_speakers: 2,

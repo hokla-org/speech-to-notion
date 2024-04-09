@@ -8,9 +8,8 @@ import {
 @Injectable()
 export class GladiaService {
   constructor() {}
-  async uploadAudio(audio: Blob): Promise<UploadResponse> {
+  async uploadAudio(file: Blob): Promise<UploadResponse> {
     const formData = new FormData();
-    const file = new File([audio], 'audio_file.webm', { type: 'audio/webm' });
     formData.append('audio', file);
 
     const response = await fetch('https://api.gladia.io/v2/upload', {
@@ -41,7 +40,7 @@ export class GladiaService {
     return data as { id: string; result_url: string };
   }
 
-  async getTranscription(id: string): Promise<TranscriptionResult | null> {
+  async getTranscription(id: string): Promise<TranscriptionResult> {
     const response = await fetch(
       `https://api.gladia.io/v2/transcription/${id}`,
       {
@@ -52,7 +51,7 @@ export class GladiaService {
       },
     );
 
-    const data = await response.json();
+    const data = (await response.json()) as TranscriptionResult;
     return data;
   }
 }

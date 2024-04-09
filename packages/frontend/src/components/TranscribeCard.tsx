@@ -10,11 +10,12 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MicIcon } from "@/components/ui/icons";
+import { AppWindowIcon, MicIcon } from "@/components/ui/icons";
 
 import { useTranscriber } from "@/hooks/useTranscriber";
 import { useNotionBlockURL } from "@/hooks/useNotionBlockURL";
 import { useState } from "react";
+import { SourceSelector } from "./SourceSelector";
 
 export default function TranscribeCard() {
   const { start, stop, results, status, error } = useTranscriber({
@@ -40,7 +41,7 @@ export default function TranscribeCard() {
   };
 
   return (
-    <Card className="w-[350px]">
+    <Card className="w-[450px]">
       <CardHeader>
         <CardTitle>Speech to Notion</CardTitle>
         <CardDescription>
@@ -54,20 +55,7 @@ export default function TranscribeCard() {
           value={notionBlockUrl}
           onChange={handleNotionBlockUrlChange}
         />
-        {urlChecker.status === "invalid" ? (
-          <div className="text-red-500 border border-red-500 p-2 rounded">
-            Notion Error: {urlChecker.error}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="text-red-500 border border-red-500 p-2 rounded">
-            Transcribe Error: {error.message}
-          </div>
-        ) : (
-          <div className="text-green-500 border border-green-500 p-2 rounded">
-            🎉 Transcribed {results.length} audio snippets! 🎉
-          </div>
-        )}
+        <SourceSelector onSubmit={(source) => console.log(source)} />
       </CardContent>
       <CardFooter className="flex">
         <Button

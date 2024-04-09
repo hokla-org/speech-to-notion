@@ -139,7 +139,7 @@ export const useTranscriber = (config: UseTranscriberConfig) => {
   const start = useCallback(async (notionURL: string) => {
     setStatus("connecting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getDisplayMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
